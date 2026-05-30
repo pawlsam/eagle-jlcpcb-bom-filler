@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Downloaded parts database (auto-fetched on first run)
+data/
+
+# Generated output files (*_lcsc.csv, *_lcsc2.csv, *_lcsc.sch, …)
+*_lcsc*.csv
+*_lcsc*.sch
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
