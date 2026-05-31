@@ -28,6 +28,8 @@ jlcpcb-bom-filler.ulp
 lookup.js
 ```
 
+`lookup.js` uses only Node.js built-in modules (`fs`, `https`, `zlib`, `node:sqlite`) — no `npm install` needed, no `node_modules` required.
+
 ---
 
 ## Usage
