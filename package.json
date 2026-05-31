@@ -1,14 +1,16 @@
 {
-  "name": "eagle-jlcpcb-bom-filler",
+  "name": "eagle-jlcpcb-ulp",
   "version": "1.0.0",
-  "description": "Fill LCSC part numbers into Eagle BOM CSV or .sch schematics from the JLCPCB Basic+Preferred offline database",
+  "description": "Eagle ULP + Node.js helper that fills LCSC part numbers into the open schematic from the offline JLCPCB Basic+Preferred database",
   "main": "index.js",
+  "bin": {
+    "eagle-jlcpcb": "./index.js"
+  },
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "node index.js",
-    "update-db": "node index.js --update-db"
+    "test": "node test.js"
   },
   "keywords": ["eagle", "jlcpcb", "lcsc", "bom", "smt", "pcb"],
   "license": "MIT",

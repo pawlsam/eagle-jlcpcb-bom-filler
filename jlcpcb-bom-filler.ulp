@@ -1,0 +1,203 @@
+#usage "en: <b>JLCPCB BOM Filler</b><p>"
+       "Adds LCSC part numbers directly to the currently open Eagle schematic "
+       "using the offline JLCPCB parts database.</p>"
+       "<p><b>Requires:</b> Node.js 22+ and lookup.js in the same folder as this ULP.</p>"
+
+// ── Variables (ALL declared first — Eagle ULP requirement) ──────────────────
+
+string ulpDir       = "";
+string lookupJs     = "";
+string tmpNode      = "";
+string tmpInput     = "";
+string tmpOutput    = "";
+string scrFile      = "";
+string tmpErr       = "";
+string nodelines[];
+string reslines[];
+string errlines[];
+string nodever      = "";
+string inputData    = "";
+string scrContent   = "";
+string ref          = "";
+string value        = "";
+string pkgName      = "";
+string ctype        = "";
+string existingLcsc = "";
+string lcsc         = "";
+string sFound       = "";
+string sNotFound    = "";
+string sSkipped     = "";
+int    nodeMajor    = 0;
+int    dot          = 0;
+int    nlines       = 0;
+int    nresults     = 0;
+int    tab          = 0;
+int    noSkip       = 0;
+int    run          = 0;
+int    exitCode     = 0;
+int    found        = 0;
+int    skipped      = 0;
+int    totalSent    = 0;
+int    i            = 0;
+
+// ── Guard: schematic window only ────────────────────────────────────────────
+
+if (!schematic) {
+    dlgMessageBox("Run this ULP from a schematic (.sch) window.");
+    exit(0);
+}
+
+ulpDir    = filedir(argv[0]);
+lookupJs  = ulpDir + "lookup.js";
+tmpNode   = ulpDir + "~nodecheck.tmp";
+tmpInput  = ulpDir + "~lookup_in.tmp";
+tmpOutput = ulpDir + "~lookup_out.tmp";
+tmpErr    = ulpDir + "~lookup_err.tmp";
+scrFile   = ulpDir + "~jlcpcb_attrs.scr";
+
+// ── Node.js version check ────────────────────────────────────────────────────
+
+system("cmd /c node --version > \"" + tmpNode + "\" 2>&1");
+if (filesize(tmpNode) > 0) {
+    nlines = fileread(nodelines, tmpNode);
+    if (nlines > 0) {
+        nodever = nodelines[0];
+        if (nodever[0] == 'v') {
+            dot = strstr(nodever, ".");
+            if (dot > 0) nodeMajor = strtol(strsub(nodever, 1, dot - 1));
+        }
+    }
+}
+system("cmd /c del \"" + tmpNode + "\" 2>nul");
+
+if (nodeMajor < 22) {
+    if (nodeMajor == 0)
+        dlgMessageBox("!Node.js not found on PATH.\nOpening download page...");
+    else
+        dlgMessageBox("!Node.js 22+ required (found " + nodever + ").\nOpening download page...");
+    system("cmd /c start https://nodejs.org/en/download");
+    exit(1);
+}
+
+// ── Dialog ───────────────────────────────────────────────────────────────────
+
+run = dlgDialog("JLCPCB BOM Filler") {
+    dlgLabel("<b>JLCPCB BOM Filler</b>");
+    dlgSpacing(5);
+    schematic(S) { dlgLabel("Schematic: " + S.name); }
+    dlgSpacing(5);
+    dlgCheckBox("Re-process parts that already have an LCSC number", noSkip);
+    dlgSpacing(5);
+    dlgHBoxLayout {
+        dlgStretch(1);
+        dlgPushButton("+Run")    dlgAccept();
+        dlgPushButton("-Cancel") dlgReject();
+    }
+};
+
+if (!run) exit(0);
+
+// ── Collect parts needing lookup from the open schematic ─────────────────────
+
+inputData = "";
+totalSent = 0;
+skipped   = 0;
+
+schematic(S) {
+    S.parts(P) {
+        ref     = P.name;
+        value   = P.value;
+        pkgName = "";
+        if (P.device.package) pkgName = P.device.package.name;
+
+        ctype = "";
+        if      (strlen(ref)>=3 && ref[0]=='F' && ref[1]=='L' && ref[2]>='0' && ref[2]<='9') ctype = "filter";
+        else if (strlen(ref)>=3 && ref[0]=='F' && ref[1]=='B' && ref[2]>='0' && ref[2]<='9') ctype = "ferrite";
+        else if (strlen(ref)>=2 && ref[0]=='R' && ref[1]>='0' && ref[1]<='9') ctype = "resistor";
+        else if (strlen(ref)>=2 && ref[0]=='C' && ref[1]>='0' && ref[1]<='9') ctype = "capacitor";
+        else if (strlen(ref)>=2 && ref[0]=='D' && ref[1]>='0' && ref[1]<='9') ctype = "diode";
+        else if (strlen(ref)>=2 && ref[0]=='L' && ref[1]>='0' && ref[1]<='9') ctype = "inductor";
+
+        if (ctype != "" && value != "") {
+            existingLcsc = "";
+            P.attributes(A) {
+                if (A.name == "LCSC_PART") existingLcsc = A.value;
+            }
+            if (noSkip || existingLcsc == "") {
+                inputData += ref + "\t" + value + "\t" + pkgName + "\t" + ctype + "\n";
+                totalSent++;
+            } else {
+                skipped++;
+            }
+        }
+    }
+}
+
+if (inputData == "") {
+    dlgMessageBox("Nothing to process — all " + skipped + " component(s) already have LCSC_PART.\nUse the re-process checkbox to update them.");
+    exit(0);
+}
+
+// ── Write temp input file ────────────────────────────────────────────────────
+
+output(tmpInput, "wt") {
+    printf("%s", inputData);
+}
+
+// ── Run lookup.js ────────────────────────────────────────────────────────────
+
+exitCode = system("cmd /c node \"" + lookupJs + "\" --input \"" + tmpInput + "\" > \"" + tmpOutput + "\" 2>\"" + tmpErr + "\"");
+system("cmd /c del \"" + tmpInput + "\" 2>nul");
+
+if (exitCode != 0) {
+    string errMsg = "lookup.js failed (exit code " + exitCode + ").\n";
+    int nerr = fileread(errlines, tmpErr);
+    if (nerr > 0) errMsg += errlines[0] + "\n";
+    if (nerr > 1) errMsg += errlines[1] + "\n";
+    system("cmd /c del \"" + tmpOutput + "\" 2>nul");
+    system("cmd /c del \"" + tmpErr + "\" 2>nul");
+    dlgMessageBox("!" + errMsg + "\nLookup path:\n" + lookupJs);
+    exit(1);
+}
+system("cmd /c del \"" + tmpErr + "\" 2>nul");
+
+// ── Read results ─────────────────────────────────────────────────────────────
+
+nresults = fileread(reslines, tmpOutput);
+system("cmd /c del \"" + tmpOutput + "\" 2>nul");
+
+// ── Build Eagle ATTRIBUTE script ──────────────────────────────────────────────
+
+scrContent = "";
+found      = 0;
+
+for (i = 0; i < nresults; i++) {
+    tab = strstr(reslines[i], "\t");
+    if (tab > 0) {
+        ref  = strsub(reslines[i], 0, tab);
+        lcsc = strsub(reslines[i], tab + 1);
+        if (ref != "" && lcsc != "") {
+            scrContent += "ATTRIBUTE '" + ref + "' 'LCSC_PART' '" + lcsc + "';\n";
+            found++;
+        }
+    }
+}
+
+// ── Summary dialog ────────────────────────────────────────────────────────────
+
+sprintf(sFound,    "%d", found);
+sprintf(sNotFound, "%d", totalSent - found);
+sprintf(sSkipped,  "%d", skipped);
+dlgMessageBox("Done!\n\n"
+              "Updated:   " + sFound    + " part(s)\n"
+              "Not found: " + sNotFound + " part(s)\n"
+              "Skipped:   " + sSkipped  + " (already had LCSC_PART)");
+
+// ── Apply attributes to the open schematic via Eagle script ──────────────────
+
+if (scrContent != "") {
+    output(scrFile, "wt") {
+        printf("%s", scrContent);
+    }
+    exit("SCRIPT '" + scrFile + "';");
+}
