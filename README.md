@@ -1,27 +1,27 @@
 # Eagle JLCPCB ULP — BOM Filler
 
-JLCPCB nabízí službu **SMT Assembly** — osazení SMD součástek přímo při výrobě DPS.  
-Aby ji bylo možné použít, je potřeba odevzdat BOM seznam, kde každá součástka má vyplněné **číslo dílu LCSC** (identifikátor ze skladu JLCPCB/LCSC).
+JLCPCB offers an **SMT Assembly** service — having your SMD components soldered during PCB manufacturing.  
+To use it, you need to submit a BOM with an **LCSC part number** filled in for every component.
 
-Tenhle nástroj to dělá automaticky — spustíš ULP v Eagle, a do otevřeného schématu se doplní atribut `LCSC_PART` ke každé rozpoznané součástce. Z takového schématu pak Eagle přímo vygeneruje kompletní BOM připravený k nahrání na JLCPCB.
+This tool does that automatically. Run the ULP in Eagle and it fills the `LCSC_PART` attribute on every recognised component in the open schematic. Eagle can then generate a complete, ready-to-upload BOM directly from the schematic.
 
-Vyhledávání probíhá offline proti [databázi Basic + Preferred dílů od JLCPCB](https://github.com/bouni/kicad-jlcpcb-tools) — bez přihlášení, bez API klíče.  
-Pouze **Basic** a **Preferred** díly (bez příplatku za assembly).
-
----
-
-## Požadavky
-
-- **Eagle** (otestováno na Eagle 9.x)
-- **Node.js 22+** — stáhni z [nodejs.org](https://nodejs.org/en/download)
-
-Databáze dílů (~347 KB) se stáhne automaticky při prvním spuštění a uloží do `%USERPROFILE%\.jlcpcb\`.
+Lookup runs offline against the [JLCPCB Basic + Preferred parts database](https://github.com/bouni/kicad-jlcpcb-tools) — no login, no API key required.  
+Only **Basic** and **Preferred** parts are matched (no extra assembly fee at JLCPCB).
 
 ---
 
-## Instalace
+## Requirements
 
-Zkopíruj oba soubory do libovolné složky (např. do složky Eagle projektu):
+- **Eagle** (tested with Eagle 9.x)
+- **Node.js 22+** — download from [nodejs.org](https://nodejs.org/en/download)
+
+The parts database (~347 KB) is downloaded automatically on first run and cached in `%USERPROFILE%\.jlcpcb\`.
+
+---
+
+## Installation
+
+Copy both files into any folder (e.g. your Eagle project folder):
 
 ```
 jlcpcb-bom-filler.ulp
@@ -30,11 +30,11 @@ lookup.js
 
 ---
 
-## Použití
+## Usage
 
-1. Otevři schéma v Eagle
-2. Spusť `jlcpcb-bom-filler.ulp` přes **File → Execute ULP…**
-3. Klikni **Run**
+1. Open your schematic in Eagle
+2. Run `jlcpcb-bom-filler.ulp` via **File → Execute ULP…**
+3. Click **Run**
 
 The ULP adds `LCSC_PART` attributes directly to matching components.  
 Parts that already have an `LCSC_PART` value are skipped by default — use the **Re-process** checkbox to update them.
