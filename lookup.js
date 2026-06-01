@@ -60,7 +60,9 @@ function normalizeResistorValue(v) {
     return `${pre}.${post}${unit}`;
   }
   if (/^\d+[rR]$/.test(v)) return v.slice(0, -1) + OHM;
-  if (v.length <= 2 && /^[\d.]+[kKmMuU]$/i.test(v)) return v + OHM;
+  // Add Ω to ALL multiplier-only values: 1k→1kΩ, 22k→22kΩ, 100k→100kΩ, 4.7k→4.7kΩ
+  // This prevents false FTS trigram matches on capacitor part numbers like 0402B222K500NT
+  if (/^[\d.]+[kKmMuU]$/i.test(v)) return v + OHM;
   if (/^\d+$/.test(v)) return v + OHM;
   return v;
 }
@@ -169,17 +171,34 @@ async function extractFromZip(buf) {
 // ---------------------------------------------------------------------------
 
 const SQL_SEARCH = `
-  SELECT "LCSC Part"    AS lcsc,
-         "MFR.Part"     AS mfr,
-         "Package"      AS package,
-         "Library Type" AS type,
-         "Stock"        AS stock,
-         "Description"  AS description
+  SELECT "LCSC Part"      AS lcsc,
+         "MFR.Part"       AS mfr,
+         "Package"        AS package,
+         "Library Type"   AS type,
+         "First Category" AS category,
+         "Stock"          AS stock,
+         "Description"    AS description
   FROM   parts
   WHERE  parts MATCH ?
   ORDER  BY CAST(REPLACE("Stock", ',', '') AS INTEGER) DESC
   LIMIT  10
 `;
+
+// Map component type → expected JLCPCB First Category (substring match)
+const CATEGORY_FILTER = {
+  resistor:  'Resistors',
+  capacitor: 'Capacitors',
+  diode:     'Diodes',
+  inductor:  'Inductors',
+  filter:    null,  // Filters or Inductors — accept any
+  ferrite:   null,
+};
+
+function matchesCategory(row, componentType) {
+  const expected = CATEGORY_FILTER[componentType];
+  if (!expected) return true;
+  return (row.category || '').includes(expected);
+}
 
 function searchPart(db, value, pkg, componentType) {
   const normValue = normalizeValue(value, componentType);
@@ -194,7 +213,8 @@ function searchPart(db, value, pkg, componentType) {
     if (!q) continue;
     try {
       const rows = db.prepare(SQL_SEARCH).all(q);
-      if (rows.length > 0) return rows[0];
+      const hit = rows.find(r => matchesCategory(r, componentType));
+      if (hit) return hit;
     } catch (err) {
       process.stderr.write(`FTS error (${q}): ${err.message}\n`);
     }
@@ -223,7 +243,7 @@ async function main() {
   const lines = fs.readFileSync(inputFile, 'utf8').split('\n').filter(l => l.trim());
 
   for (const line of lines) {
-    const cols = line.split('\t');
+    const cols = line.trimEnd().split('\t');  // trimEnd removes trailing \r on CRLF files
     if (cols.length < 4) continue;
     const [ref, value, pkg, type] = cols;
     if (!ref || !value || !type) continue;
